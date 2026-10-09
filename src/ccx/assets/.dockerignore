@@ -1,0 +1,7 @@
+**
+!Dockerfile
+!src/
+!src/ccx/
+!src/ccx/**
+src/**/__pycache__/
+src/**/.env

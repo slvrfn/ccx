@@ -1,0 +1,57 @@
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "code-context-cli"
+version = "0.1.0"
+description = "Local, isolated OpenCode + Claude Context + Graphify development environments"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+  "click>=8.1,<9",
+  "filelock>=3.16,<4",
+  "mcp>=1.26,<2",
+  "python-dotenv>=1.0,<2",
+  "watchfiles>=1.0,<2",
+]
+
+[project.optional-dependencies]
+container = ["pymilvus>=2.5.6,<2.6"]
+
+[project.scripts]
+ccx = "ccx.cli:main"
+
+[dependency-groups]
+dev = [
+  "build>=1.2,<2", "pytest>=8,<9", "pytest-cov>=6,<7",
+  "ruff>=0.11,<1", "mypy>=1.15,<2", "types-PyYAML>=6",
+  "PyYAML>=6,<7", "jsonschema>=4,<5",
+]
+integration = [
+  "graphifyy[mcp]==0.9.83", "pymilvus==2.5.18", "milvus-lite==2.5.1",
+  "setuptools==80.9.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ccx"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ANN"]
+ignore = ["ANN401", "E501"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+exclude = ["tests"]
+[[tool.mypy.overrides]]
+module = ["pymilvus.*", "graphify.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["integration: requires installed Graphify or Docker (explicit opt-in)"]

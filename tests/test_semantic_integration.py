@@ -1,0 +1,156 @@
+"""Optional real Node MCP + Milvus Lite contract test with an offline embedding stub.
+
+This tests interoperability and data flow, not the retrieval quality of real models.
+Set CCX_TEST_SEMANTIC=1 and CCX_UPSTREAM_NODE_MODULES to the locked npm install.
+Run with pymilvus==2.5.18, milvus-lite==2.5.1, setuptools<81, ccx and pytest.
+"""
+
+import hashlib
+import json
+import os
+import shutil
+import socket
+import threading
+import time
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+
+import pytest
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(
+    os.environ.get("CCX_TEST_SEMANTIC") != "1",
+    reason="Requires opt-in, Node dependencies and local Milvus Lite.",
+)
+def test_real_semantic_lifecycle_and_transfer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import grpc
+    from milvus_lite.server import Server
+    from pymilvus import Collection, connections, utility
+
+    from ccx.runtime import mcp_server, transfer
+
+    node_modules = Path(os.environ["CCX_UPSTREAM_NODE_MODULES"])
+    (tmp_path / "node_modules").symlink_to(node_modules, target_is_directory=True)
+    runtime = tmp_path / "runtime"
+    runtime.mkdir()
+    for file in Path(mcp_server.__file__).parent.glob("*.mjs"):
+        shutil.copyfile(file, runtime / file.name)
+    monkeypatch.setattr(mcp_server, "UPSTREAM", runtime / "upstream.mjs")
+    monkeypatch.setattr(mcp_server, "INCREMENTAL", runtime / "incremental.mjs")
+
+    class Embeddings(BaseHTTPRequestHandler):
+        def do_POST(self) -> None:
+            payload = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+            items = payload["input"]
+            if isinstance(items, str):
+                items = [items]
+            rows = []
+            for index, item in enumerate(items):
+                digest = hashlib.sha256(str(item).encode()).digest()
+                rows.append(
+                    {
+                        "object": "embedding",
+                        "index": index,
+                        "embedding": [(v + 1) / 256 for v in digest[:8]],
+                    }
+                )
+            body = json.dumps(
+                {
+                    "object": "list",
+                    "data": rows,
+                    "model": "test-embedding",
+                    "usage": {"prompt_tokens": 1, "total_tokens": 1},
+                }
+            ).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, format: str, *args: object) -> None:
+            pass
+
+    endpoint = ThreadingHTTPServer(("127.0.0.1", 0), Embeddings)
+    thread = threading.Thread(target=endpoint.serve_forever, daemon=True)
+    thread.start()
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+    server = Server(str(tmp_path / "test.db"), address=f"127.0.0.1:{port}")
+    assert server.init() and server.start()
+    try:
+        for _ in range(100):
+            try:
+                with socket.create_connection(("127.0.0.1", port), timeout=0.1):
+                    break
+            except OSError:
+                time.sleep(0.1)
+        else:
+            pytest.fail("Milvus Lite did not become ready")
+        repo = tmp_path / "repository"
+        repo.mkdir()
+        source = repo / "auth.py"
+        source.write_text('def authenticate(token):\n    return token == "original"\n')
+        for key, value in {
+            "HOME": str(tmp_path / "home"),
+            "CCX_PROJECT_PATH": str(repo),
+            "CCX_GRAPH_OUT": "graphify-out",
+            "CCX_INDEX_TIMEOUT": "60",
+            "OPENAI_BASE_URL": f"http://127.0.0.1:{endpoint.server_port}/v1",
+            "OPENAI_API_KEY": "test",
+            "EMBEDDING_PROVIDER": "OpenAI",
+            "EMBEDDING_MODEL": "test-embedding",
+            "MILVUS_ADDRESS": f"127.0.0.1:{port}",
+            "HYBRID_MODE": "false",
+            "CCX_GRAPH_VERSION": "0.9.83",
+            "CCX_CONTEXT_VERSION": "0.1.15",
+        }.items():
+            monkeypatch.setenv(key, value)
+        result = mcp_server.index_codebase(str(repo))
+        assert "indexed" in result
+        assert "authenticate" in mcp_server.search_code(str(repo), "authentication")
+        source.write_text('def authenticate(token):\n    return token == "changed"\n')
+        result = json.loads(mcp_server.index_codebase(str(repo)))
+        assert result["modified"] == 1
+        assert "changed" in mcp_server.search_code(str(repo), "authentication")
+        extra = repo / "extra.py"
+        extra.write_text("def new_helper():\n    return 12345\n")
+        assert json.loads(mcp_server.index_codebase(str(repo)))["added"] == 1
+        extra.unlink()
+        assert json.loads(mcp_server.index_codebase(str(repo)))["removed"] == 1
+
+        bundle = tmp_path / "export.zip"
+        transfer.export(bundle)
+        copied = tmp_path / "restored"
+        shutil.copytree(repo, copied)
+        monkeypatch.setenv("CCX_PROJECT_PATH", str(copied))
+        monkeypatch.setenv("HOME", str(tmp_path / "restored-home"))
+        try:
+            transfer.restore(bundle)
+        except grpc.RpcError as exc:
+            # Milvus Lite 2.5 lacks RenameCollection. Assert production rollback
+            # rather than replacing that RPC with a fake and claiming a round trip.
+            assert exc.code() == grpc.StatusCode.UNIMPLEMENTED
+            assert not utility.has_collection(transfer.collection_name(str(copied)))
+            assert not any("_import_" in name for name in utility.list_collections())
+            monkeypatch.setenv("CCX_PROJECT_PATH", str(repo))
+            monkeypatch.setenv("HOME", str(tmp_path / "home"))
+            mcp_server.clear_index(str(repo))
+            assert not utility.has_collection(transfer.collection_name(str(repo)))
+            return
+        assert "authenticate" in mcp_server.search_code(str(copied), "authentication")
+        collection = Collection(transfer.collection_name(str(copied)))
+        assert collection.num_entities > 0
+        assert "indexed" in mcp_server.index_codebase(str(copied))
+        mcp_server.clear_index(str(copied))
+        assert not utility.has_collection(transfer.collection_name(str(copied)))
+    finally:
+        connections.disconnect("default")
+        server.stop()
+        endpoint.shutdown()
+        endpoint.server_close()
+        thread.join(timeout=2)
