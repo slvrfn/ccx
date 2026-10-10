@@ -60,6 +60,30 @@ def test_generated_files_refuse_symlink(
         write_project_files(settings, project, tmp_path / "state", {}, {})
 
 
+def test_uv_settings_forwarded_to_container(
+    settings: Settings, project: Project, tmp_path: Path
+) -> None:
+    configured = Settings(
+        settings.home,
+        {
+            **settings.values,
+            "UV_HTTP_TIMEOUT": "600",
+            "UV_CONCURRENT_DOWNLOADS": "1",
+            "OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS": "3600000",
+        },
+    )
+    state = tmp_path / "state"
+    write_project_files(configured, project, state, {}, {})
+    values = dict(line.split("=", 1) for line in (state / "runtime.env").read_text().splitlines())
+    assert values["UV_HTTP_TIMEOUT"] == "600"
+    assert values["UV_CONCURRENT_DOWNLOADS"] == "1"
+    assert values["OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS"] == "3600000"
+    assert values["UV_CACHE_DIR"] == "/home/ccx/.cache/uv"
+    assert values["UV_PROJECT_ENVIRONMENT"] == "/home/ccx/.venvs/project"
+    assert values["UV_LINK_MODE"] == "copy"
+    assert "UV_HTTP_RETRIES" not in values  # Not available in pinned uv 0.6.14.
+
+
 def test_docker_command_isolated(
     settings: Settings, project: Project, runner: FakeRunner, tmp_path: Path
 ) -> None:

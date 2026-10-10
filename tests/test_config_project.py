@@ -38,6 +38,15 @@ def test_environment_precedence(settings: Settings, monkeypatch: pytest.MonkeyPa
         ("INFERENCE_API_HOST", "host;cmd"),
         ("INFERENCE_API_BASE_URL", "ftp://server"),
         ("INFERENCE_API_BASE_URL", "http://key@host"),
+        ("UV_HTTP_TIMEOUT", "0"),
+        ("UV_HTTP_TIMEOUT", "nan"),
+        ("UV_CONCURRENT_DOWNLOADS", "-1"),
+        ("OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS", "1.5"),
+        ("UV_PROJECT_ENVIRONMENT", "/opt/venv"),
+        ("UV_PROJECT_ENVIRONMENT", "/workspace/project/.venv"),
+        ("UV_PROJECT_ENVIRONMENT", "/home/ccx/../outside"),
+        ("UV_CACHE_DIR", "/tmp/uv"),
+        ("UV_LINK_MODE", "symlink"),
     ],
 )
 def test_bad_settings(
@@ -51,6 +60,12 @@ def test_bad_settings(
 def test_base_url_override(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setenv("INFERENCE_API_BASE_URL", "https://gateway.example/v1/")
     assert Settings.load(tmp_path).url("INFERENCE") == "https://gateway.example/v1"
+
+
+def test_uv_directories_must_not_overlap(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("UV_PROJECT_ENVIRONMENT", "/home/ccx/.cache/uv/venv")
+    with pytest.raises(CcxError, match="overlap"):
+        Settings.load(tmp_path)
 
 
 def test_init_idempotent_preserves_secret(settings: Settings) -> None:

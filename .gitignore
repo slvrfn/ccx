@@ -12,3 +12,7 @@ dist/
 graphify-out/
 .idea/
 
+# ccx generated artifacts
+/graphify-out/
+/.opencode/skills/ccx-context/
+/.opencode/plugins/ccx-context.js
