@@ -10,7 +10,7 @@ const {context, snapshots} = components();
 const sync = new SyncManager(context, snapshots); // Deliberately no startBackgroundSync().
 const handlers = new ToolHandlers(context, snapshots, sync);
 const names = ["index_codebase", "search_code", "get_indexing_status", "clear_index",
-               "ccx_verify_index"];
+               "ccx_verify_index", "ccx_wait_index"];
 const server = new Server({name: "ccx-upstream", version: "0.1.0"}, {capabilities: {tools: {}}});
 server.setRequestHandler(ListToolsRequestSchema, async () => ({tools: names.map(name => ({
   name, description: name, inputSchema: {type: "object", properties: {path: {type: "string"}},
@@ -19,6 +19,29 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({tools: names.map(
 server.setRequestHandler(CallToolRequestSchema, async request => {
   const args = request.params.arguments;
   switch (request.params.name) {
+    case "ccx_wait_index": {
+      // Wait for this server's actual background task, not just a snapshot that
+      // upstream may leave at "indexing/100%" after completion.
+      try {
+        const task = handlers.indexingTasks.get(args.path);
+        if (task) await task.promise;
+        const info = snapshots.getCodebaseInfo(args.path);
+        if (info?.status === "indexed") {
+          return {content: [{type: "text", text: JSON.stringify(info)}]};
+        }
+        const message = info?.errorMessage || "Background indexing ended without an indexed "
+          + "snapshot. Inspect source exclusions and retry with ccx reindex --full.";
+        if (info?.status !== "indexfailed") {
+          snapshots.setCodebaseIndexFailed(args.path, message);
+          snapshots.saveCodebaseSnapshot();
+        }
+        return {isError: true, content: [{type: "text", text: message}]};
+      } catch (error) {
+        snapshots.setCodebaseIndexFailed(args.path, String(error));
+        snapshots.saveCodebaseSnapshot();
+        return {isError: true, content: [{type: "text", text: String(error)}]};
+      }
+    }
     case "ccx_verify_index":
       try {
         const count = await context.getVectorDatabase().verify(

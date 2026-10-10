@@ -4,12 +4,14 @@ const {context, snapshots} = components();
 const path = process.env.CCX_PROJECT_PATH;
 try {
   const previous = snapshots.getCodebaseInfo(path);
+  await context.getPreparedCollection(path); // Check live endpoint vs existing vector schema.
   const changes = await context.reindexByChange(path, undefined,
     previous?.requestIgnorePatterns || [], previous?.requestCustomExtensions || []);
   const rowCount = await context.getVectorDatabase().verify(
     context.getCollectionName(path)
   );
-  if (rowCount < 0) throw new Error("Cannot verify collection row count");
+  if (rowCount <= 0) throw new Error("Incremental indexing produced zero stored chunks; "
+    + "check source exclusions and run ccx reindex --full after correcting them.");
   if (changes.failed && changes.failed > 0) {
     throw new Error(`Partial incremental failure: ${changes.failed} operations failed`);
   }

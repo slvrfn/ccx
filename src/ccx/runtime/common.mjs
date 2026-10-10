@@ -4,6 +4,7 @@ import {Context, MilvusVectorDatabase} from "@zilliz/claude-context-core";
 import {createEmbeddingInstance} from "@zilliz/claude-context-mcp/dist/embedding.js";
 import {createMcpConfig} from "@zilliz/claude-context-mcp/dist/config.js";
 import {SnapshotManager} from "@zilliz/claude-context-mcp/dist/snapshot.js";
+import path from "node:path";
 
 console.log = console.error; // MCP stdout is protocol-only.
 
@@ -43,6 +44,18 @@ class CheckedMilvus extends MilvusVectorDatabase {
     // Some SDK releases ignore nonzero modern status.code in DescribeCollection.
     return (await this.listCollections()).includes(name);
   }
+  async checkDimension(name, expected) {
+    if (!await this.hasCollection(name)) return;
+    const result = await this.client.describeCollection({collection_name: name});
+    const field = result.schema?.fields?.find(item => item.name === "vector");
+    const value = field?.type_params?.find(item => item.key === "dim")?.value;
+    const stored = Number(value);
+    if (!Number.isInteger(stored) || stored !== expected) {
+      throw new Error(`Embedding dimension mismatch in ${name}: collection=${value ?? "unknown"}, `
+        + `endpoint=${expected}. Back up any valid index, then run ccx reindex --full `
+        + `for this project. Do not delete other projects' collections.`);
+    }
+  }
   async verify(name, expected) {
     if (this.failures.length) throw new Error(this.failures.join("; "));
     if (!await this.hasCollection(name)) throw new Error("Expected collection does not exist");
@@ -59,9 +72,47 @@ class CheckedMilvus extends MilvusVectorDatabase {
   }
 }
 
+export class CheckedContext extends Context {
+  embeddingReady;
+  async findIgnoreFiles(root) {
+    // Docker build-context allowlists are not semantic source exclusions. The
+    // upstream walker prunes "src" before !src/ can rescue it under a ** rule.
+    // Keep .gitignore, .contextignore and other existing indexing exclusions.
+    return (await super.findIgnoreFiles(root))
+      .filter(filename => path.basename(filename) !== ".dockerignore");
+  }
+  async getPreparedCollection(root) {
+    if (!this.embeddingReady) {
+      this.embeddingReady = (async () => {
+        const embedding = this.getEmbedding();
+        const detected = await embedding.detectDimension();
+        if (!Number.isInteger(detected) || detected < 1) {
+          throw new Error("Embedding endpoint returned an invalid vector dimension.");
+        }
+        // The pinned OpenAI adapter's detectDimension returns but does not store it.
+        embedding.dimension = detected;
+        return detected;
+      })();
+    }
+    const dimension = await this.embeddingReady;
+    await this.getVectorDatabase().checkDimension(this.getCollectionName(root), dimension);
+    return super.getPreparedCollection(root);
+  }
+  async indexCodebase(...args) {
+    const stats = await super.indexCodebase(...args);
+    if (stats.totalChunks <= 0) {
+      throw new Error("Semantic indexing produced zero chunks. Check supported source extensions "
+        + "and .gitignore/.contextignore exclusions. .dockerignore is not used by ccx semantic "
+        + "indexing. No usable semantic index was created; fix exclusions and retry "
+        + "with ccx reindex --full.");
+    }
+    return stats;
+  }
+}
+
 export function components() {
   const config = createMcpConfig();
-  const context = new Context({
+  const context = new CheckedContext({
     embedding: createEmbeddingInstance(config),
     vectorDatabase: new CheckedMilvus({
       address: config.milvusAddress, token: config.milvusToken,

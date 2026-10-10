@@ -2,7 +2,7 @@
 
 `ccx` provides a local development environment combining OpenCode, Claude Context
 semantic search, and Graphify code graphs. This README is the user guide and command
-reference for version `0.1.2`; the commands and defaults below match the supplied
+reference for version `0.1.3`; the commands and defaults below match the supplied
 implementation, not hypothetical upstream features.
 
 If you encountered `asyncio.run() cannot be called from a running event loop`
@@ -76,7 +76,7 @@ ccx --help
 
 ```bash
 # Alternatively: install the included wheel.
-uv tool install --python 3.12 dist/code_context_cli-0.1.2-py3-none-any.whl
+uv tool install --python 3.12 dist/code_context_cli-0.1.3-py3-none-any.whl
 ```
 
 The installation script must be run from the supplied project tree, not from the
@@ -444,6 +444,16 @@ an inference endpoint. The timestamp is file metadata, not proof that every
 current source edit has been indexed.
 
 ## Refreshing context
+
+Semantic indexing ignores `.dockerignore` starting in 0.1.3: Docker build allowlists
+are not semantic source exclusions. Use `.gitignore` or `.contextignore` for
+indexing-specific exclusions, and review files previously protected only by
+`.dockerignore` before sending source to an embedding endpoint.
+
+If an earlier version stopped at “Indexed 0 files, 0 chunks” without launching
+OpenCode, follow the [0.1.3 recovery guide](docs/releases/0.1.3.md). Empty results
+now fail explicitly, and the client waits for actual task completion rather than
+a potentially stuck `indexing` snapshot.
 
 ### `ccx reindex TARGET [--full] [--yes]`
 
@@ -1042,4 +1052,5 @@ changing the CLI behavior.
 - [Verification results and remaining acceptance checks](docs/verification.md)
 - [0.1.1 MCP runtime fix and upgrade steps](docs/releases/0.1.1.md)
 - [0.1.2 persistent Python environments and download troubleshooting](docs/releases/0.1.2.md)
+- [0.1.3 empty-index hang, ignore rules and embedding schema recovery](docs/releases/0.1.3.md)
 - [Original technology transfer document](docs/technology-transfer.md)

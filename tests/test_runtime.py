@@ -134,20 +134,77 @@ def test_status_reports_snapshot(runtime: Path, monkeypatch: pytest.MonkeyPatch)
     assert json.loads(mcp_server.get_indexing_status(str(runtime)))["status"] == "not_found"
 
 
-def test_mcp_waits_for_terminal_snapshot(runtime: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_mcp_waits_for_actual_background_task(
+    runtime: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls: list[str] = []
+
     class Client:
         async def call_tool(self, *args: Any, **kwargs: Any) -> CallToolResult:
-            return CallToolResult(content=[TextContent(type="text", text="started")])
+            calls.append(args[0])
+            text = (
+                json.dumps({"status": "indexed", "totalChunks": 4})
+                if (args[0] == "ccx_wait_index")
+                else "started"
+            )
+            return CallToolResult(content=[TextContent(type="text", text=text)])
 
     @asynccontextmanager
     async def fake_session(*args: Any, **kwargs: Any) -> Any:
         yield Client()
 
-    states = iter([{"status": "indexing"}, {"status": "indexed", "totalChunks": 4}])
     monkeypatch.setattr(mcp_server, "session", fake_session)
-    monkeypatch.setattr(mcp_server, "snapshot_status", lambda: next(states))
+    # Even a permanently nonterminal disk snapshot cannot keep the client waiting.
+    monkeypatch.setattr(mcp_server, "snapshot_status", lambda: {"status": "indexing"})
     result = asyncio.run(mcp_server.upstream("index_codebase", {"path": str(runtime)}, wait=True))
     assert json.loads(result)["totalChunks"] == 4
+    assert calls == ["index_codebase", "ccx_wait_index", "ccx_verify_index"]
+
+
+@pytest.mark.parametrize(
+    "status",
+    [
+        {"status": "indexed", "totalChunks": 0},
+        {"status": "indexing", "indexingPercentage": 100},
+    ],
+)
+def test_completed_task_cannot_leave_nonterminal_client_wait(
+    runtime: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    status: dict[str, Any],
+) -> None:
+    class Client:
+        async def call_tool(self, name: str, *args: Any, **kwargs: Any) -> CallToolResult:
+            value = json.dumps(status) if name == "ccx_wait_index" else "started"
+            return CallToolResult(content=[TextContent(type="text", text=value)])
+
+    @asynccontextmanager
+    async def fake_session(*args: Any, **kwargs: Any) -> Any:
+        yield Client()
+
+    monkeypatch.setattr(mcp_server, "session", fake_session)
+    with pytest.raises(CcxError, match="nonempty"):
+        asyncio.run(mcp_server.upstream("index_codebase", {"path": str(runtime)}, wait=True))
+
+
+def test_background_task_failure_is_propagated(
+    runtime: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class Client:
+        async def call_tool(self, name: str, *args: Any, **kwargs: Any) -> CallToolResult:
+            failed = name == "ccx_wait_index"
+            return CallToolResult(
+                content=[TextContent(type="text", text="zero chunks" if failed else "started")],
+                isError=failed,
+            )
+
+    @asynccontextmanager
+    async def fake_session(*args: Any, **kwargs: Any) -> Any:
+        yield Client()
+
+    monkeypatch.setattr(mcp_server, "session", fake_session)
+    with pytest.raises(CcxError, match="zero chunks"):
+        asyncio.run(mcp_server.upstream("index_codebase", {"path": str(runtime)}, wait=True))
 
 
 def test_subprocess_runner_captures_and_reports_failure() -> None:

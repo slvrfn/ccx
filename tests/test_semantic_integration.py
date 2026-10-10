@@ -31,8 +31,9 @@ def test_real_semantic_lifecycle_and_transfer(
 ) -> None:
     import grpc
     from milvus_lite.server import Server
-    from pymilvus import Collection, connections, utility
+    from pymilvus import Collection, CollectionSchema, DataType, FieldSchema, connections, utility
 
+    from ccx.errors import CcxError
     from ccx.mcp_client import result_text, session
     from ccx.runtime import mcp_server, transfer
 
@@ -106,7 +107,13 @@ def test_real_semantic_lifecycle_and_transfer(
             pytest.fail("Milvus Lite did not become ready")
         repo = tmp_path / "repository"
         repo.mkdir()
-        source = repo / "auth.py"
+        # Reproduce ccx's build-context allowlist: upstream would prune "src"
+        # before processing !src/. Keep genuine Git exclusions effective.
+        (repo / ".dockerignore").write_text("**\n!Dockerfile\n!src/\n!src/ccx/\n!src/ccx/**\n")
+        (repo / ".gitignore").write_text("ignored.py\n")
+        (repo / "ignored.py").write_text("def should_never_be_indexed():\n    return 0\n")
+        source = repo / "src/ccx/auth.py"
+        source.parent.mkdir(parents=True)
         source.write_text('def authenticate(token):\n    return token == "original"\n')
         for key, value in {
             "HOME": str(tmp_path / "home"),
@@ -125,6 +132,7 @@ def test_real_semantic_lifecycle_and_transfer(
             monkeypatch.setenv(key, value)
         result = invoke("index_codebase", repo)
         assert "indexed" in result
+        assert json.loads(result)["indexedFiles"] == 1
         assert "indexed" in invoke("get_indexing_status", repo)
         assert "authenticate" in invoke("search_code", repo, query="authentication")
         source.write_text('def authenticate(token):\n    return token == "changed"\n')
@@ -136,6 +144,60 @@ def test_real_semantic_lifecycle_and_transfer(
         assert json.loads(invoke("index_codebase", repo))["added"] == 1
         extra.unlink()
         assert json.loads(invoke("index_codebase", repo))["removed"] == 1
+
+        # Empty completion must fail quickly instead of leaving the client
+        # polling a 100%/indexing snapshot indefinitely.
+        with monkeypatch.context() as isolated:
+            empty = tmp_path / "empty"
+            empty.mkdir()
+            (empty / "code.py").write_text("def excluded():\n    return 0\n")
+            (empty / ".gitignore").write_text("**\n")
+            isolated.setenv("CCX_PROJECT_PATH", str(empty))
+            isolated.setenv("HOME", str(tmp_path / "empty-home"))
+            started = time.monotonic()
+            with pytest.raises(CcxError, match="zero chunks"):
+                invoke("index_codebase", empty)
+            assert time.monotonic() - started < 30
+            info = json.loads(invoke("get_indexing_status", empty))
+            assert info["status"] == "indexfailed"
+            # Upstream clear_index excludes failed-only snapshots; full reindex
+            # is the production recovery path. Remove this test's empty fixture.
+            transfer.connect()
+            utility.drop_collection(transfer.collection_name(str(empty)))
+
+        # Reproduce an existing custom-model collection with the wrong width.
+        with monkeypatch.context() as isolated:
+            mismatched = tmp_path / "mismatched"
+            mismatched.mkdir()
+            (mismatched / "code.py").write_text("def example():\n    return 123\n")
+            isolated.setenv("CCX_PROJECT_PATH", str(mismatched))
+            isolated.setenv("HOME", str(tmp_path / "mismatch-home"))
+            transfer.connect()
+            name = transfer.collection_name(str(mismatched))
+            Collection(
+                name,
+                CollectionSchema(
+                    [
+                        FieldSchema(
+                            name="id", dtype=DataType.VARCHAR, max_length=100, is_primary=True
+                        ),
+                        FieldSchema(name="vector", dtype=DataType.FLOAT_VECTOR, dim=1536),
+                    ],
+                    description=f"codebasePath:{mismatched}",
+                ),
+            )
+            with pytest.raises(CcxError, match="dimension mismatch"):
+                invoke("index_codebase", mismatched)
+            # Explicit full rebuild repairs only this project's vector schema.
+            fixed = json.loads(invoke("index_codebase", mismatched, force=True))
+            assert fixed["status"] == "indexed"
+            dim = next(
+                field.params["dim"]
+                for field in Collection(name).schema.fields
+                if field.name == "vector"
+            )
+            assert dim == 8
+            invoke("clear_index", mismatched)
 
         bundle = tmp_path / "export.zip"
         transfer.export(bundle)

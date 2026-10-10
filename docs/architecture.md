@@ -50,7 +50,10 @@ already-indexed paths unless forced, and its server entrypoint creates a periodi
 sync timer ([upstream handlers](https://raw.githubusercontent.com/zilliztech/claude-context/master/packages/mcp/src/handlers.ts),
 [upstream entrypoint](https://raw.githubusercontent.com/zilliztech/claude-context/master/packages/mcp/src/index.ts)).
 Our narrow JS entrypoint uses the pinned handlers without starting that timer.
-Python keeps the MCP connection open until indexing reaches a terminal status.
+Python keeps the MCP connection open and waits for the Node server's actual
+background-task promise. It does not poll disk snapshots as its completion signal:
+upstream can leave a snapshot at `indexing/100%` after an empty task completes.
+Zero-chunk completion becomes an explicit failed index instead of a usable result.
 For an existing index, a one-shot JS adapter invokes `Context.reindexByChange`.
 
 This design intentionally imports internal package modules. It is more fragile
@@ -71,6 +74,13 @@ The runtime records the embedding endpoint/model identity and refuses incrementa
 refresh or search when that identity changes until a full rebuild. Export/import
 also validates model name and probes vector dimension; matching names and
 dimensions do not prove equivalent model weights. Operators must ensure that.
+
+Before preparing or reusing a collection, ccx probes the embedding endpoint and
+compares its vector dimension with an existing schema. An incompatible collection
+is not overwritten automatically; a project-specific full rebuild is required.
+Semantic ignore-file discovery skips `.dockerignore` but retains other upstream
+ignore-file sources. Docker build-context exclusions must not substitute for
+`.gitignore` or `.contextignore` rules protecting source from indexing.
 
 ## Graphify compatibility seam
 

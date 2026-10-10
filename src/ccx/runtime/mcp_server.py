@@ -43,21 +43,26 @@ async def upstream(tool: str, arguments: dict[str, Any], *, wait: bool = False) 
         answer = result_text(await client.call_tool(tool, arguments))
         if not wait:
             return answer
-        # index_codebase starts a background promise; keep stdio alive until it finishes.
-        while True:
-            status = snapshot_status()
-            if status["status"] == "indexed":
-                verification = result_text(
-                    await client.call_tool(
-                        "ccx_verify_index",
-                        {"path": arguments["path"], "expected": status.get("totalChunks")},
-                    )
+        # The same Node process owns the task promise. Its snapshot can stay
+        # nonterminal even after a task ends; waiting only on that file can hang.
+        status = json.loads(
+            result_text(
+                await client.call_tool(
+                    "ccx_wait_index",
+                    {"path": arguments["path"]},
                 )
-                status["verification"] = verification
-                return json.dumps(status)
-            if status["status"] in ("failed", "indexfailed", "sync_failed"):
-                raise CcxError(f"Index failed: {status.get('errorMessage', status)}")
-            await asyncio.sleep(0.25)
+            )
+        )
+        if status.get("status") != "indexed" or status.get("totalChunks", 0) <= 0:
+            raise CcxError("Semantic indexing ended without a nonempty indexed result.")
+        verification = result_text(
+            await client.call_tool(
+                "ccx_verify_index",
+                {"path": arguments["path"], "expected": status["totalChunks"]},
+            )
+        )
+        status["verification"] = verification
+        return json.dumps(status)
 
 
 def run_upstream(tool: str, arguments: dict[str, Any], *, wait: bool = False) -> str:

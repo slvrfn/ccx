@@ -1,6 +1,6 @@
 # Code Context CLI Verification Report
 
-Release candidate: `0.1.2`. Verification performed on October 9, 2026 in a Linux
+Release candidate: `0.1.3`. Verification performed on October 10, 2026 in a Linux
 sandbox with Python 3.12.13 and Node 20.20.2. The Docker runtime specifies Node 22;
 Docker was not installed in this sandbox.
 
@@ -8,12 +8,14 @@ Docker was not installed in this sandbox.
 
 | Check | Result |
 | --- | --- |
-| Default pytest suite | 112 passed; 2 opt-in integration tests skipped in this invocation |
+| Default pytest suite | 115 passed; 2 opt-in integration tests skipped in this invocation |
 | Default-suite Python statement coverage | 77%; integration coverage not combined |
 | Python MCP regression tests | 7 passed with both host MCP 1.30 and pinned runtime MCP 1.26; all 7 failed before the fix |
 | Stdio MCP facade | All four tools invoked over the protocol; server startup and calls run with warnings treated as errors |
 | Real Graphify integration | Passed: extraction, custom output, report generation, incremental update, query |
 | Real semantic integration | Passed through the Python stdio MCP facade and Node MCP: local Milvus Lite, initial index, status, search, modify/add/delete refresh, export, failed-import rollback, clear |
+| Empty-index regressions | Docker build allowlist ignored for semantic indexing; genuine Git exclusion respected; all-excluded source returns a failed snapshot promptly |
+| Existing embedding schema | Wrong-dimensional collection rejected; explicit full rebuild restores the test endpoint's dimension |
 | Native watcher | Passed: debounce and preservation of events arriving during an active refresh |
 | Import success path | Passed with a mocked Milvus boundary: row checks, promotion call, path remapping, ownership marker |
 | Archive safety | Passed: checksum corruption, path traversal, symlink, unknown-version and manifest checks |

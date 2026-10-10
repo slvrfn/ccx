@@ -8,7 +8,8 @@ import {createMcpConfig} from "@zilliz/claude-context-mcp/dist/config.js";
 import {MilvusVectorDatabase} from "@zilliz/claude-context-core";
 assert.equal(typeof createMcpConfig, "function");
 assert.equal(typeof MilvusVectorDatabase.prototype.getCollectionRowCount, "function");
-for (const name of ["reindexByChange", "getCollectionName", "getVectorDatabase"]) {
+for (const name of ["reindexByChange", "getCollectionName", "getVectorDatabase",
+                   "findIgnoreFiles", "getPreparedCollection", "indexCodebase"]) {
   assert.equal(typeof Context.prototype[name], "function", `Context.${name}`);
 }
 for (const name of ["handleIndexCodebase", "handleSearchCode", "handleClearIndex",
