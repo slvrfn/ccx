@@ -1,6 +1,6 @@
 # Code Context CLI Verification Report
 
-Release candidate: `0.1.1`. Verification performed on October 9, 2026 in a Linux
+Release candidate: `0.1.2`. Verification performed on October 9, 2026 in a Linux
 sandbox with Python 3.12.13 and Node 20.20.2. The Docker runtime specifies Node 22;
 Docker was not installed in this sandbox.
 
@@ -8,7 +8,7 @@ Docker was not installed in this sandbox.
 
 | Check | Result |
 | --- | --- |
-| Default pytest suite | 100 passed; 2 opt-in integration tests skipped in this invocation |
+| Default pytest suite | 112 passed; 2 opt-in integration tests skipped in this invocation |
 | Default-suite Python statement coverage | 77%; integration coverage not combined |
 | Python MCP regression tests | 7 passed with both host MCP 1.30 and pinned runtime MCP 1.26; all 7 failed before the fix |
 | Stdio MCP facade | All four tools invoked over the protocol; server startup and calls run with warnings treated as errors |
@@ -30,6 +30,12 @@ Docker was not installed in this sandbox.
 The live semantic test uses a deterministic local HTTP embedding stub and a real
 Milvus Lite process. This validates API/data-flow integration, not retrieval
 quality, model behavior, credentials, or the user's endpoint deployment.
+
+The earlier 0.1.0 integration test bypassed the outer Python MCP dispatch layer.
+Version 0.1.1 corrects that gap: the same semantic lifecycle now crosses the
+Python MCP subprocess before reaching the Node server, and explicit regression
+tests cover the reported nested-event-loop error and settings warning. The local
+Milvus Lite dependency still emits an unrelated `pkg_resources` deprecation warning.
 
 ## Not verified here
 

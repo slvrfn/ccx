@@ -51,6 +51,33 @@ class Settings:
         ):
             if not result.get(key).isdigit() or not 1 <= int(result.get(key)) <= 65535:
                 raise CcxError(f"{key} must be a port in 1..65535.")
+        for key in (
+            "UV_HTTP_TIMEOUT",
+            "UV_CONCURRENT_DOWNLOADS",
+            "OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS",
+        ):
+            if not result.get(key).isdigit() or int(result.get(key)) < 1:
+                raise CcxError(f"{key} must be a positive integer.")
+        if result.get("UV_LINK_MODE") not in ("copy", "hardlink", "clone"):
+            raise CcxError(
+                "UV_LINK_MODE must be copy, hardlink or clone (symlinks are not supported)."
+            )
+        for key in ("UV_CACHE_DIR", "UV_PROJECT_ENVIRONMENT"):
+            path = Path(result.get(key))
+            if (
+                not path.is_absolute()
+                or ".." in path.parts
+                or not path.is_relative_to("/home/ccx")
+                or path == Path("/home/ccx")
+            ):
+                raise CcxError(
+                    f"{key} must be an absolute child path of /home/ccx "
+                    "so it persists and cannot overwrite the ccx runtime."
+                )
+        cache = Path(result.get("UV_CACHE_DIR"))
+        environment = Path(result.get("UV_PROJECT_ENVIRONMENT"))
+        if cache.is_relative_to(environment) or environment.is_relative_to(cache):
+            raise CcxError("UV_CACHE_DIR and UV_PROJECT_ENVIRONMENT must not overlap.")
         safe_child(Path("/workspace/repository"), result.get("GRAPHIFY_OUT_DIR"))
         for key in ("GRAPHIFY_VERSION", "CLAUDE_CONTEXT_VERSION"):
             if not re.fullmatch(r"\d+\.\d+\.\d+(?:[a-zA-Z0-9.+-]*)?", result.get(key)):

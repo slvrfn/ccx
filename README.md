@@ -2,8 +2,13 @@
 
 `ccx` provides a local development environment combining OpenCode, Claude Context
 semantic search, and Graphify code graphs. This README is the user guide and command
-reference for version `0.1.0`; the commands and defaults below match the supplied
+reference for version `0.1.2`; the commands and defaults below match the supplied
 implementation, not hypothetical upstream features.
+
+If you encountered `asyncio.run() cannot be called from a running event loop`
+or the FastMCP `lifespan` warning in 0.1.0, use the
+[0.1.1 fix and upgrade guide](docs/releases/0.1.1.md). Upgrading the host package
+alone is not enough: recreate the project container with the fixed runtime.
 
 ## Contents
 
@@ -19,6 +24,7 @@ implementation, not hypothetical upstream features.
 - [Watching file changes](#watching-file-changes)
 - [Exporting, importing, and clearing data](#exporting-importing-and-clearing-data)
 - [Configuration reference](#configuration-reference)
+- [Project Python environments and large dependency downloads](#project-python-environments-and-large-dependency-downloads)
 - [Common workflows](#common-workflows)
 - [State, generated files, and permissions](#state-generated-files-and-permissions)
 - [Troubleshooting](#troubleshooting)
@@ -70,7 +76,7 @@ ccx --help
 
 ```bash
 # Alternatively: install the included wheel.
-uv tool install --python 3.12 dist/code_context_cli-0.1.0-py3-none-any.whl
+uv tool install --python 3.12 dist/code_context_cli-0.1.2-py3-none-any.whl
 ```
 
 The installation script must be run from the supplied project tree, not from the
@@ -691,6 +697,31 @@ The example template contains a password placeholder, which a fresh `ccx init`
 replaces. Avoid changing storage credentials casually after data exists; treat
 credential rotation and service-image upgrades as coordinated platform changes.
 
+### Project Python environments and large dependency downloads
+
+Version 0.1.2 forwards the settings below to the project container. The dedicated
+environment and cache persist in its HOME volume rather than using the host
+repository's `.venv` or ccx's own `/opt/venv`; see the
+[uv environment and timeout guide](docs/releases/0.1.2.md) for setup and recovery.
+
+| Variable | Shipped default | Purpose |
+| --- | --- | --- |
+| `UV_CACHE_DIR` | `/home/ccx/.cache/uv` | Persistent uv package cache |
+| `UV_PROJECT_ENVIRONMENT` | `/home/ccx/.venvs/project` | Container-side Python environment |
+| `UV_HTTP_TIMEOUT` | `300` | HTTP-read timeout in seconds |
+| `UV_CONCURRENT_DOWNLOADS` | `2` | Limit competing downloads |
+| `UV_LINK_MODE` | `copy` | Cross-filesystem-compatible package installation |
+| `OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | `1800000` | Default 30-minute OpenCode shell-tool deadline |
+
+`COMMAND_TIMEOUT_SECONDS` does not change OpenCode's shell-tool deadline. An
+explicit timeout supplied by the assistant can override the default; inspect
+the tool call if setup is still interrupted around two minutes.
+
+After a successful explicit `uv sync`, ask the assistant to use `uv run --no-sync`
+for repeated runs while dependencies remain unchanged. Never use that flag as
+a substitute for finishing an incomplete install, and do not routinely clean
+the cache or replace CUDA requirements merely to make a failing install shorter.
+
 ### Pinned package and image versions
 
 | Variable | Shipped default |
@@ -720,6 +751,7 @@ Changing `.env` alone does not update either running process.
 | Embedding endpoint or model identity | Stop watcher, prepare/reopen container, explicitly full-reindex |
 | Graph enablement, output directory, or extraction mode | Stop watcher and reopen; pass the intended graph flag |
 | Watcher interval | Stop/start watcher, or pass `--interval` at startup |
+| uv directories/download limits or OpenCode shell deadline | Exit OpenCode, stop watcher and reopen the container; finish initial project sync if using a new environment |
 | Packaged image/runtime contents | Refresh templates as appropriate and use `open --rebuild` |
 | Shared service ports/images/credentials | Plan a shared-platform restart and check every affected project |
 
@@ -1008,4 +1040,6 @@ changing the CLI behavior.
 - [Operations and release runbook](docs/runbook.md)
 - [Transfer-document requirements mapping](docs/requirements.md)
 - [Verification results and remaining acceptance checks](docs/verification.md)
+- [0.1.1 MCP runtime fix and upgrade steps](docs/releases/0.1.1.md)
+- [0.1.2 persistent Python environments and download troubleshooting](docs/releases/0.1.2.md)
 - [Original technology transfer document](docs/technology-transfer.md)

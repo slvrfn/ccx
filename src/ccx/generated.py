@@ -15,6 +15,16 @@ Use claude-context semantic search for natural-language implementation discovery
 Cross-check results against source files; either index may be stale.
 Graph mutation and semantic clear_index require explicit human approval.
 Do not launch graphify watch: ccx owns the one combined file watcher.
+Container project Python dependencies belong to UV_PROJECT_ENVIRONMENT, not /opt/venv
+or the host repository's .venv. Do not use uv pip --system or install into /opt/venv.
+For large dependency sets, ask the user to finish one explicit uv sync before running
+tests. After a successful sync, use uv run --no-sync for repeated commands while
+dependencies are unchanged; do not bypass sync for a missing or incomplete environment.
+Do not repeat a failing large sync without inspecting whether the HTTP read timeout
+or the shell-tool deadline ended it. Set an explicit suitable bash tool timeout for
+initial setup. Never clean the uv cache as a routine response to an interrupted sync.
+The container has no GPU passthrough by default. Do not rewrite PyTorch/CUDA requirements
+or select a CPU-only backend without checking the project's requirements with the user.
 """
 
 
@@ -90,6 +100,15 @@ def write_project_files(
         "GRAPHIFY_OUT": project.graph_out,
         "GRAPHIFY_NO_TIPS": "1",
     }
+    for key in (
+        "UV_CACHE_DIR",
+        "UV_PROJECT_ENVIRONMENT",
+        "UV_HTTP_TIMEOUT",
+        "UV_CONCURRENT_DOWNLOADS",
+        "UV_LINK_MODE",
+        "OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS",
+    ):
+        values[key] = settings.get(key)
     if any("\n" in v or "\r" in v for v in values.values()):
         raise CcxError("Environment values must not contain line breaks.")
     atomic_write(state / "runtime.env", "".join(f"{k}={v}\n" for k, v in values.items()))
