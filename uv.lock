@@ -163,6 +163,7 @@ name = "code-context-cli"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "anyio" },
     { name = "click" },
     { name = "filelock" },
     { name = "mcp" },
@@ -195,6 +196,7 @@ integration = [
 
 [package.metadata]
 requires-dist = [
+    { name = "anyio", specifier = ">=4,<5" },
     { name = "click", specifier = ">=8.1,<9" },
     { name = "filelock", specifier = ">=3.16,<4" },
     { name = "mcp", specifier = ">=1.26,<2" },

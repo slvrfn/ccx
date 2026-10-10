@@ -9,6 +9,7 @@ description = "Local, isolated OpenCode + Claude Context + Graphify development 
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+  "anyio>=4,<5",
   "click>=8.1,<9",
   "filelock>=3.16,<4",
   "mcp>=1.26,<2",

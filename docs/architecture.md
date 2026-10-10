@@ -26,6 +26,12 @@ all semantic MCP calls, graph builds, clears, and transfers hold the same
 per-project HOME lock. This serializes separate CLI and OpenCode MCP processes.
 It is not a distributed lock across hostile containers or users.
 
+FastMCP tool entry points are async, but delegate the complete synchronous operation
+to an AnyIO worker thread. File locks, blocking subprocesses and the upstream MCP
+client's own event loop stay on that worker; calling `asyncio.run()` directly
+inside the server's event-loop thread is forbidden. Transport regression tests
+exercise this boundary, not only the underlying helper functions.
+
 The native watcher uses a background event observer and a foreground refresh
 loop. The observer never performs indexing. Events are queued while indexing
 runs and coalesced after a configurable quiet period. A separate lock prevents

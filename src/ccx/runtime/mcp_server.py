@@ -7,10 +7,13 @@ facade invokes updates. FileLock serializes independent CLI/OpenCode MCP connect
 import asyncio
 import json
 import os
+from functools import partial
 from pathlib import Path
 from typing import Any
 
+from anyio import to_thread
 from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp.server import Settings as FastMCPSettings
 
 from ccx.errors import CcxError
 from ccx.io import write_json
@@ -25,6 +28,10 @@ from ccx.runtime.state import (
     validate_path,
 )
 
+# MCP 1.26 Settings refers to FastMCP before that class is defined. Resolve the
+# forward reference after the SDK module has loaded, before settings sources run.
+# This is a no-op on SDK versions which already build the complete schema.
+FastMCPSettings.model_rebuild()
 mcp = FastMCP("ccx-claude-context")
 UPSTREAM = Path(__file__).with_name("upstream.mjs")
 INCREMENTAL = Path(__file__).with_name("incremental.mjs")
@@ -57,7 +64,6 @@ def run_upstream(tool: str, arguments: dict[str, Any], *, wait: bool = False) ->
     return asyncio.run(upstream(tool, arguments, wait=wait))
 
 
-@mcp.tool()
 def index_codebase(path: str, force: bool = False) -> str:
     """Build or incrementally refresh the project's semantic index."""
     validate_path(path)
@@ -102,7 +108,6 @@ def index_codebase(path: str, force: bool = False) -> str:
         return output
 
 
-@mcp.tool()
 def search_code(path: str, query: str, limit: int = 10) -> str:
     """Semantic implementation search. Does not modify the index."""
     validate_path(path)
@@ -113,7 +118,6 @@ def search_code(path: str, query: str, limit: int = 10) -> str:
         )
 
 
-@mcp.tool()
 def get_indexing_status(path: str) -> str:
     """Report status and collection existence without creating an index."""
     validate_path(path)
@@ -125,7 +129,6 @@ def get_indexing_status(path: str) -> str:
         return json.dumps(status)
 
 
-@mcp.tool()
 def clear_index(path: str) -> str:
     """DESTRUCTIVE: delete this project's semantic index, not its source or graph."""
     validate_path(path)
@@ -133,6 +136,35 @@ def clear_index(path: str) -> str:
         result = run_upstream("clear_index", {"path": str(root())})
         (state_dir() / "embedding.json").unlink(missing_ok=True)
         return result
+
+
+@mcp.tool(name="index_codebase")
+async def index_codebase_tool(path: str, force: bool = False) -> str:
+    """Build or incrementally refresh the project's semantic index."""
+    # The synchronous operation owns the file lock, subprocesses, and its own
+    # upstream event loop. Run the WHOLE operation on one worker thread.
+    # Do not abandon the worker on AnyIO cancellation while it still owns a lock.
+    return await to_thread.run_sync(partial(index_codebase, path, force), abandon_on_cancel=False)
+
+
+@mcp.tool(name="search_code")
+async def search_code_tool(path: str, query: str, limit: int = 10) -> str:
+    """Semantic implementation search. Does not modify the index."""
+    return await to_thread.run_sync(
+        partial(search_code, path, query, limit), abandon_on_cancel=False
+    )
+
+
+@mcp.tool(name="get_indexing_status")
+async def get_indexing_status_tool(path: str) -> str:
+    """Report status and collection existence without creating an index."""
+    return await to_thread.run_sync(partial(get_indexing_status, path), abandon_on_cancel=False)
+
+
+@mcp.tool(name="clear_index")
+async def clear_index_tool(path: str) -> str:
+    """DESTRUCTIVE: delete this project's semantic index, not its source or graph."""
+    return await to_thread.run_sync(partial(clear_index, path), abandon_on_cancel=False)
 
 
 if __name__ == "__main__":

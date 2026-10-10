@@ -5,15 +5,18 @@ Set CCX_TEST_SEMANTIC=1 and CCX_UPSTREAM_NODE_MODULES to the locked npm install.
 Run with pymilvus==2.5.18, milvus-lite==2.5.1, setuptools<81, ccx and pytest.
 """
 
+import asyncio
 import hashlib
 import json
 import os
 import shutil
 import socket
+import sys
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -30,6 +33,7 @@ def test_real_semantic_lifecycle_and_transfer(
     from milvus_lite.server import Server
     from pymilvus import Collection, connections, utility
 
+    from ccx.mcp_client import result_text, session
     from ccx.runtime import mcp_server, transfer
 
     node_modules = Path(os.environ["CCX_UPSTREAM_NODE_MODULES"])
@@ -38,8 +42,17 @@ def test_real_semantic_lifecycle_and_transfer(
     runtime.mkdir()
     for file in Path(mcp_server.__file__).parent.glob("*.mjs"):
         shutil.copyfile(file, runtime / file.name)
-    monkeypatch.setattr(mcp_server, "UPSTREAM", runtime / "upstream.mjs")
-    monkeypatch.setattr(mcp_server, "INCREMENTAL", runtime / "incremental.mjs")
+    monkeypatch.setenv("CCX_TEST_JS_DIR", str(runtime))
+    fixture = Path(__file__).parent / "fixtures/mcp_integration_server.py"
+
+    def invoke(tool: str, path: Path, **arguments: Any) -> str:
+        async def via_stdio() -> str:
+            async with session(
+                sys.executable, ["-W", "error", str(fixture)], 90, dict(os.environ)
+            ) as client:
+                return result_text(await client.call_tool(tool, {"path": str(path), **arguments}))
+
+        return asyncio.run(via_stdio())
 
     class Embeddings(BaseHTTPRequestHandler):
         def do_POST(self) -> None:
@@ -110,18 +123,19 @@ def test_real_semantic_lifecycle_and_transfer(
             "CCX_CONTEXT_VERSION": "0.1.15",
         }.items():
             monkeypatch.setenv(key, value)
-        result = mcp_server.index_codebase(str(repo))
+        result = invoke("index_codebase", repo)
         assert "indexed" in result
-        assert "authenticate" in mcp_server.search_code(str(repo), "authentication")
+        assert "indexed" in invoke("get_indexing_status", repo)
+        assert "authenticate" in invoke("search_code", repo, query="authentication")
         source.write_text('def authenticate(token):\n    return token == "changed"\n')
-        result = json.loads(mcp_server.index_codebase(str(repo)))
+        result = json.loads(invoke("index_codebase", repo))
         assert result["modified"] == 1
-        assert "changed" in mcp_server.search_code(str(repo), "authentication")
+        assert "changed" in invoke("search_code", repo, query="authentication")
         extra = repo / "extra.py"
         extra.write_text("def new_helper():\n    return 12345\n")
-        assert json.loads(mcp_server.index_codebase(str(repo)))["added"] == 1
+        assert json.loads(invoke("index_codebase", repo))["added"] == 1
         extra.unlink()
-        assert json.loads(mcp_server.index_codebase(str(repo)))["removed"] == 1
+        assert json.loads(invoke("index_codebase", repo))["removed"] == 1
 
         bundle = tmp_path / "export.zip"
         transfer.export(bundle)
@@ -139,14 +153,14 @@ def test_real_semantic_lifecycle_and_transfer(
             assert not any("_import_" in name for name in utility.list_collections())
             monkeypatch.setenv("CCX_PROJECT_PATH", str(repo))
             monkeypatch.setenv("HOME", str(tmp_path / "home"))
-            mcp_server.clear_index(str(repo))
+            invoke("clear_index", repo)
             assert not utility.has_collection(transfer.collection_name(str(repo)))
             return
-        assert "authenticate" in mcp_server.search_code(str(copied), "authentication")
+        assert "authenticate" in invoke("search_code", copied, query="authentication")
         collection = Collection(transfer.collection_name(str(copied)))
         assert collection.num_entities > 0
-        assert "indexed" in mcp_server.index_codebase(str(copied))
-        mcp_server.clear_index(str(copied))
+        assert "indexed" in invoke("index_codebase", copied)
+        invoke("clear_index", copied)
         assert not utility.has_collection(transfer.collection_name(str(copied)))
     finally:
         connections.disconnect("default")
