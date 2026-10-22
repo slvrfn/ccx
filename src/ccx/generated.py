@@ -120,10 +120,15 @@ def write_project_files(
             + GUIDANCE
         ),
         "plugins/ccx-context.js": (
-            "export const CcxContext = async () => ({\n"
-            '  "experimental.chat.system.transform": async (_input, output) => {\n'
-            f"    output.system.push({json.dumps(GUIDANCE)});\n"
-            "  }\n});\n"
+            'import { Plugin } from "@opencode/plugin"\n\n'
+            "export default Plugin.define({\n"
+            '  id: "ccx-context",\n'
+            "  async setup(ctx) {\n"
+            '    await ctx.session.hook("context", (event) => {\n'
+            f'      event.system.push({{ type: "text", text: {json.dumps(GUIDANCE)} }});\n'
+            "    })\n"
+            "  }\n"
+            "})\n"
         ),
     }
     for relative, content in files.items():
