@@ -26,9 +26,15 @@ ccx = "ccx.cli:main"
 
 [dependency-groups]
 dev = [
-  "build>=1.2,<2", "pytest>=8,<9", "pytest-cov>=6,<7",
-  "ruff>=0.11,<1", "mypy>=1.15,<2", "types-PyYAML>=6",
-  "PyYAML>=6,<7", "jsonschema>=4,<5",
+  "build>=1.2,<2",
+  "pytest>=8,<9",
+  "pytest-cov>=6,<7",
+  "ruff>=0.11,<1",
+  "mypy>=1.15,<2",
+  "types-PyYAML>=6",
+  "PyYAML>=6,<7",
+  "jsonschema>=4,<5",
+  "ty>=0.0.90",
 ]
 integration = [
   "graphifyy[mcp]==0.9.83", "pymilvus==2.5.18", "milvus-lite==2.5.1",
@@ -53,6 +59,9 @@ exclude = ["tests"]
 [[tool.mypy.overrides]]
 module = ["pymilvus.*", "graphify.*"]
 ignore_missing_imports = true
+
+[tool.ty]
+src = { include = ["src"] }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

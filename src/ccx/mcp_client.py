@@ -1,7 +1,7 @@
 """MCP transport, with session lifetime covering asynchronous upstream indexing."""
 
 import asyncio
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from datetime import timedelta
 from typing import Any
@@ -23,7 +23,7 @@ def result_text(result: CallToolResult) -> str:
 @asynccontextmanager
 async def session(
     command: str, args: list[str], timeout: float, env: dict[str, str] | None = None
-) -> AsyncIterator[ClientSession]:
+) -> AsyncGenerator[ClientSession, None]:
     params = StdioServerParameters(command=command, args=args, env=env)
     try:
         async with asyncio.timeout(timeout):

@@ -23,13 +23,13 @@ def collection_name(path: str) -> str:
 
 
 def connect() -> None:
-    from pymilvus import connections
+    from pymilvus import connections  # ty: ignore[unresolved-import]
 
     connections.connect(alias="default", uri="http://" + os.environ["MILVUS_ADDRESS"])
 
 
 def export(destination: Path) -> None:
-    from pymilvus import Collection, utility
+    from pymilvus import Collection, utility  # ty: ignore[unresolved-import]
 
     connect()
     with lock(), tempfile.TemporaryDirectory() as temporary:
@@ -102,7 +102,7 @@ def probe_dimension() -> int:
 
 
 def restore(source: Path) -> None:
-    from pymilvus import Collection, CollectionSchema, utility
+    from pymilvus import Collection, CollectionSchema, utility  # ty: ignore[unresolved-import]
 
     connect()
     with lock(), tempfile.TemporaryDirectory() as temporary:
