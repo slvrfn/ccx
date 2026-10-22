@@ -103,7 +103,7 @@ its `force` parameter. For stricter protection, change that permission to `ask`.
 ## Docker runtime decision
 
 The pinned official Dockerfile uses Alpine and musl
-([official Dockerfile](https://raw.githubusercontent.com/anomalyco/opencode/v1.2.27/packages/opencode/Dockerfile)).
+([official Dockerfile](https://raw.githubusercontent.com/anomalyco/opencode/v2.1.2/packages/opencode/Dockerfile)).
 Graphify and PyMilvus pull scientific/native Python dependencies. To avoid fragile
 Alpine source builds, the Dockerfile uses the official image as a version stage,
 then installs that exact official OpenCode npm release in Debian with Python 3.12

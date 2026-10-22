@@ -736,7 +736,7 @@ the cache or replace CUDA requirements merely to make a failing install shorter.
 
 | Variable | Shipped default |
 | --- | --- |
-| `OPENCODE_IMAGE` | `ghcr.io/anomalyco/opencode:1.2.27` |
+| `OPENCODE_IMAGE` | `ghcr.io/anomalyco/opencode:2.1.2` |
 | `CLAUDE_CONTEXT_VERSION` | `0.1.15` |
 | `GRAPHIFY_VERSION` | `0.9.83` |
 | `MILVUS_IMAGE` | `milvusdb/milvus:v2.5.6` |

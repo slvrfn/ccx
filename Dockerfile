@@ -2,9 +2,9 @@
 # The official image is the authoritative OpenCode version. Its Alpine/musl
 # runtime cannot use all Graphify/PyMilvus binary wheels, so use the same official
 # npm release in a glibc runtime. See docs/architecture.md for this explicit deviation.
-ARG OPENCODE_IMAGE=ghcr.io/anomalyco/opencode:1.2.27
+ARG OPENCODE_IMAGE=ghcr.io/anomalyco/opencode:2.1.2
 FROM ${OPENCODE_IMAGE} AS opencode-release
-RUN opencode --version > /opencode-version
+RUN opencode --version | cut -d" " -f2 > /opencode-version
 
 FROM node:22.14.0-bookworm-slim AS node
 FROM ghcr.io/astral-sh/uv:0.6.14 AS uv
@@ -26,8 +26,8 @@ WORKDIR /opt/ccx
 COPY src/ccx/assets/package.json src/ccx/assets/package-lock.json ./
 RUN test "$CLAUDE_CONTEXT_VERSION" = "0.1.15" \
  && npm ci --omit=dev \
- && npm install -g "opencode-ai@$(cat /tmp/opencode-version)" \
- && test "$(opencode --version)" = "$(cat /tmp/opencode-version)"
+ && npm install -g "@opencode/cli@$(cat /tmp/opencode-version)" \
+ && test "$(opencode --version)" = "opencode $(cat /tmp/opencode-version)"
 COPY src/ccx/assets/requirements-container.txt ./
 RUN test "$GRAPHIFY_VERSION" = "0.9.83" \
  && uv venv /opt/venv \
