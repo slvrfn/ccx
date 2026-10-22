@@ -5,6 +5,7 @@ mcp==1.26.0
 python-dotenv==1.2.2
 watchfiles==1.1.1
 graphifyy[mcp]==0.9.83
+openai==3.36.1
 pymilvus==2.5.18
 milvus-lite==2.5.1
 setuptools==80.9.0
