@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from ccx.config import Settings
+from ccx.config import Settings, safe_home_root
 from ccx.errors import CcxError
 from ccx.graph.serve import READ_TOOLS
 from ccx.io import atomic_write, write_json
@@ -79,6 +79,7 @@ def write_project_files(
     atomic_write(state / "CONTEXT.md", GUIDANCE, 0o644)
     values = {
         "HOME": "/home/ccx",
+        "CCX_SAFE_HOME": str(safe_home_root()),
         "OPENCODE_CONFIG": "/ccx-config/opencode.json",
         "CCX_PROJECT_PATH": project.mount,
         "CCX_GRAPH_OUT": project.graph_out,
@@ -109,6 +110,11 @@ def write_project_files(
         "OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS",
     ):
         values[key] = settings.get(key)
+    # The container is the `ccx` user, so its Python home is always /home/ccx
+    # regardless of the host's CCX_SAFE_HOME. Force the persistent paths there
+    # (CCX_SAFE_HOME is forwarded so settings.load() still validates them).
+    values["UV_CACHE_DIR"] = f"{safe_home_root()}/.cache/uv"
+    values["UV_PROJECT_ENVIRONMENT"] = f"{safe_home_root()}/.venvs/project"
     if any("\n" in v or "\r" in v for v in values.values()):
         raise CcxError("Environment values must not contain line breaks.")
     atomic_write(state / "runtime.env", "".join(f"{k}={v}\n" for k, v in values.items()))

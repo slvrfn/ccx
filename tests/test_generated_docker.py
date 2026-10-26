@@ -1,5 +1,4 @@
 import json
-import os
 from pathlib import Path
 
 import pytest
@@ -79,8 +78,9 @@ def test_uv_settings_forwarded_to_container(
     assert values["UV_HTTP_TIMEOUT"] == "600"
     assert values["UV_CONCURRENT_DOWNLOADS"] == "1"
     assert values["OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS"] == "3600000"
-    leading_home = os.environ.get("CCX_SAFE_HOME", "/home/ccx")
-    assert values["UV_CACHE_DIR"] == f"{leading_home}/.cache/uv"
+    # The container is the `ccx` user, so its Python home is always canonical
+    # /home/ccx regardless of the host's CCX_SAFE_HOME.
+    assert values["UV_CACHE_DIR"] == "/home/ccx/.cache/uv"
     assert values["UV_PROJECT_ENVIRONMENT"] == "/home/ccx/.venvs/project"
     assert values["UV_LINK_MODE"] == "copy"
     assert "UV_HTTP_RETRIES" not in values  # Not available in pinned uv 0.6.14.
