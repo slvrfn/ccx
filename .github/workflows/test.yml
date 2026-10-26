@@ -1,5 +1,9 @@
 name: tests
 on: [push, pull_request]
+variables:
+  HOME: /home/ccx
+  UV_PROJECT_ENVIRONMENT: /home/ccx/.venvs/project
+  UV_CACHE_DIR: /home/ccx/.cache/uv
 jobs:
   python:
     runs-on: ubuntu-latest
