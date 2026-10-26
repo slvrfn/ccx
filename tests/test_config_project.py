@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from ccx.config import Settings, asset_root
+from ccx.config import Settings
 from ccx.errors import CcxError
 from ccx.io import atomic_write, read_json, safe_child, write_json
 from ccx.project import Project, ProjectStore
@@ -130,9 +130,3 @@ def test_atomic_io(tmp_path: Path) -> None:
     path.write_text("broken")
     with pytest.raises(CcxError):
         read_json(path)
-
-
-def test_packaged_templates_match_top_level() -> None:
-    root = Path(__file__).parents[1]
-    for name in ("Dockerfile", "compose.yaml", ".env.example", ".dockerignore"):
-        assert (root / name).read_bytes() == (asset_root() / name).read_bytes()

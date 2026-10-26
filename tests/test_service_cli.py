@@ -104,7 +104,7 @@ def test_interactive_no_exit_never_removes_container(
     settings: Settings, runner: FakeRunner, project: Project
 ) -> None:
     """A non-interactive run never issues a `docker rm` for the container."""
-    app = application(settings, runner)
+    application(settings, runner)
     # docker.remove is never called
     removal_vectors = _docker_rm_calls(runner)
     assert removal_vectors == []
