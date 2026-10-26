@@ -79,10 +79,10 @@ def test_uv_settings_forwarded_to_container(
     assert values["UV_HTTP_TIMEOUT"] == "600"
     assert values["UV_CONCURRENT_DOWNLOADS"] == "1"
     assert values["OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS"] == "3600000"
-    # Cache and project paths mirror the validated CCX_SAFE_HOME (HOME).
-    leading_home = os.environ.get("CCX_SAFE_HOME", "/home/ccx")
-    assert values["UV_CACHE_DIR"] == f"{leading_home}/.cache/uv"
-    assert values["UV_PROJECT_ENVIRONMENT"] == f"{leading_home}/.venvs/project"
+    # Cache and project paths are forwarded exactly as settings validated them
+    # (CI may relocate UV_CACHE_DIR, e.g. setup-uv's _temp dir).
+    assert values["UV_CACHE_DIR"] == os.environ.get("UV_CACHE_DIR")
+    assert values["UV_PROJECT_ENVIRONMENT"] == os.environ.get("UV_PROJECT_ENVIRONMENT")
     assert values["UV_LINK_MODE"] == "copy"
     assert "UV_HTTP_RETRIES" not in values  # Not available in pinned uv 0.6.14.
 
