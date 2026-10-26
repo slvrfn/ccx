@@ -77,6 +77,39 @@ def test_stopped_container_fails_cleanly(
         app.refresh(project)
 
 
+def _docker_rm_calls(runner: FakeRunner) -> list[str]:
+    """Return the args vectors of every `docker rm` the FakeRunner recorded."""
+    vectors: list[list[str]] = []
+    for call in runner.calls:
+        if call[0:2] == ["docker", "rm"]:
+            vectors.append(call)
+    return vectors
+
+
+def test_interactive_exit_removes_project_container(
+    settings: Settings, runner: FakeRunner, project: Project
+) -> None:
+    """Calling docker.remove after `/exit` tears down the managed container, keeping the
+    data volume intact."""
+    app = application(settings, runner)
+    app.docker.remove(project)
+
+    removal_vectors = _docker_rm_calls(runner)
+    assert removal_vectors == [["docker", "rm", "-f", project.container]]
+    # Removal references the container name, never the project data volume.
+    assert project.volume not in removal_vectors[0]
+
+
+def test_interactive_no_exit_never_removes_container(
+    settings: Settings, runner: FakeRunner, project: Project
+) -> None:
+    """A non-interactive run never issues a `docker rm` for the container."""
+    app = application(settings, runner)
+    # docker.remove is never called
+    removal_vectors = _docker_rm_calls(runner)
+    assert removal_vectors == []
+
+
 def test_cli_help_all_required_commands(tmp_path: Path) -> None:
     result = CliRunner().invoke(cli, ["--home", str(tmp_path), "--help"])
     assert result.exit_code == 0

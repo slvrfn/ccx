@@ -85,6 +85,11 @@ def platform_status(app: Application) -> None:
 @click.option("--no-interactive", is_flag=True)
 @click.option("--prepare-only", is_flag=True, help="Configure/start container, but do not index.")
 @click.option("--rebuild", is_flag=True, help="Rebuild the project image.")
+@click.option(
+    "--keep-alive",
+    is_flag=True,
+    help="Leave the managed project container running after /exit (default: stop it on /exit).",
+)
 @click.pass_obj
 def open_project(
     app: Application,
@@ -95,6 +100,7 @@ def open_project(
     no_interactive: bool,
     prepare_only: bool,
     rebuild: bool,
+    keep_alive: bool,
 ) -> None:
     project = app.open(path, graph=graph, rebuild=rebuild, prepare_only=prepare_only)
     click.echo(f"Project: {project.slug}")
@@ -105,8 +111,14 @@ def open_project(
             project,
             interval or app.settings.number("WATCH_DEBOUNCE_SECONDS"),
         )
-    if not no_interactive:
-        app.docker.interactive(project)
+    if no_interactive:
+        return
+    app.docker.interactive(project)
+    # OpenCode exited (/exit or session end): stop the managed project container.
+    # The persistent HOME volume is retained, so reopening reuses the image cache
+    # and state instead of rebuilding. --keep-alive opts out.
+    if not keep_alive:
+        app.docker.remove(project)
 
 
 @cli.command()

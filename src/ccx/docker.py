@@ -157,6 +157,15 @@ class Docker:
     def interactive(self, project: Project) -> None:
         self.exec(project, ["opencode", project.mount], capture=False, tty=sys.stdin.isatty())
 
+    def remove(self, project: Project) -> None:
+        # Stops the managed project container (keeping its HOME volume) after a
+        # session ends. Missing containers are treated as already-cleaned and
+        # silently ignored so a teardown is idempotent.
+        try:
+            self.runner.run(["docker", "rm", "-f", project.container])
+        except CcxError:
+            pass
+
     def inspect_running(self, project: Project) -> bool:
         try:
             value = self.runner.run(
