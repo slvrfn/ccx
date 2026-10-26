@@ -7,10 +7,9 @@ jobs:
       matrix:
         python: ["3.12", "3.13"]
     env:
-      HOME: $HOME
-      CCX_SAFE_HOME: $HOME
-      UV_PROJECT_ENVIRONMENT: $HOME/.venvs/project
-      UV_CACHE_DIR: $HOME/.cache/uv
+      CCX_SAFE_HOME: /home/runner
+      UV_PROJECT_ENVIRONMENT: /home/runner/.venvs/project
+      UV_CACHE_DIR: /home/runner/.cache/uv
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
@@ -21,10 +20,9 @@ jobs:
   integration:
     runs-on: ubuntu-latest
     env:
-      HOME: $HOME
-      CCX_SAFE_HOME: $HOME
-      UV_PROJECT_ENVIRONMENT: $HOME/.venvs/project
-      UV_CACHE_DIR: $HOME/.cache/uv
+      CCX_SAFE_HOME: /home/runner
+      UV_PROJECT_ENVIRONMENT: /home/runner/.venvs/project
+      UV_CACHE_DIR: /home/runner/.cache/uv
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
@@ -37,10 +35,9 @@ jobs:
   compose-contract:
     runs-on: ubuntu-latest
     env:
-      HOME: $HOME
-      CCX_SAFE_HOME: $HOME
-      UV_PROJECT_ENVIRONMENT: $HOME/.venvs/project
-      UV_CACHE_DIR: $HOME/.cache/uv
+      CCX_SAFE_HOME: /home/runner
+      UV_PROJECT_ENVIRONMENT: /home/runner/.venvs/project
+      UV_CACHE_DIR: /home/runner/.cache/uv
     steps:
       - uses: actions/checkout@v4
       - run: docker compose --env-file src/ccx/assets/.env.example config --quiet
