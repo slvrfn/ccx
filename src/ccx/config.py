@@ -19,8 +19,19 @@ def asset_root() -> Path:
     return Path(str(files("ccx").joinpath("assets")))
 
 
+def safe_home_root() -> Path:
+    """Anchor under which cache/project paths must live.
+
+    Defaults to the ccx container image's home (the user is literally ``ccx``),
+    but can be overridden via ``CCX_SAFE_HOME`` for environments where the home
+    is a different user (e.g. a CI runner), keeping the guard strict while the
+    path is writable.
+    """
+    return Path(os.environ.get("CCX_SAFE_HOME", "/home/ccx")).expanduser().resolve()
+
+
 def default_home() -> Path:
-    return Path(os.environ.get("CCX_HOME", "~/.claude-context-cli")).expanduser().resolve()
+    return Path(os.environ.get("CCX_HOME", "~/.code-context-cli")).expanduser().resolve()
 
 
 @dataclass(frozen=True)
@@ -62,16 +73,17 @@ class Settings:
             raise CcxError(
                 "UV_LINK_MODE must be copy, hardlink or clone (symlinks are not supported)."
             )
+        root = safe_home_root()
         for key in ("UV_CACHE_DIR", "UV_PROJECT_ENVIRONMENT"):
             path = Path(result.get(key))
             if (
                 not path.is_absolute()
                 or ".." in path.parts
-                or not path.is_relative_to("/home/ccx")
-                or path == Path("/home/ccx")
+                or not path.is_relative_to(root)
+                or path == root
             ):
                 raise CcxError(
-                    f"{key}={path} must be an absolute child path of /home/ccx "
+                    f"{key}={path} must be an absolute child path of {root} "
                     "so it persists and cannot overwrite the ccx runtime."
                 )
         cache = Path(result.get("UV_CACHE_DIR"))
