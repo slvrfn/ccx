@@ -27,7 +27,7 @@ def safe_home_root() -> Path:
     is a different user (e.g. a CI runner), keeping the guard strict while the
     path is writable.
     """
-    return Path(os.environ.get("CCX_SAFE_HOME", "/home/ccx")).expanduser().resolve()
+    return Path(os.environ.get("CCX_SAFE_HOME", "/home/ccx")).expanduser().absolute()
 
 
 def default_home() -> Path:

@@ -66,7 +66,7 @@ def test_base_url_override(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> N
 def test_uv_directories_must_not_overlap(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     # UV_PROJECT must sit under the actual UV_CACHE_DIR (which CI may relocate,
     # e.g. to setup-uv's _temp dir) to trigger the no-overlap guard.
-    cache = Path(os.environ.get("UV_CACHE_DIR"))
+    cache = Path(os.environ.get("UV_CACHE_DIR", "/home/ccx/.cache/uv"))
     assert cache.is_absolute()
     monkeypatch.setenv("UV_PROJECT_ENVIRONMENT", f"{cache}/.venv")
     with pytest.raises(CcxError, match="overlap"):
