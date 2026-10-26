@@ -71,7 +71,7 @@ class Settings:
                 or path == Path("/home/ccx")
             ):
                 raise CcxError(
-                    f"{key} must be an absolute child path of /home/ccx "
+                    f"{key}={path} must be an absolute child path of /home/ccx "
                     "so it persists and cannot overwrite the ccx runtime."
                 )
         cache = Path(result.get("UV_CACHE_DIR"))
