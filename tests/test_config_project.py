@@ -1,4 +1,5 @@
 import json
+import os
 import stat
 from pathlib import Path
 
@@ -63,7 +64,8 @@ def test_base_url_override(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> N
 
 
 def test_uv_directories_must_not_overlap(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    monkeypatch.setenv("UV_PROJECT_ENVIRONMENT", "/home/ccx/.cache/uv/venv")
+    leading_home = os.environ.get("CCX_SAFE_HOME", "/home/ccx")
+    monkeypatch.setenv("UV_PROJECT_ENVIRONMENT", f"${leading_home}/.cache/uv/venv")
     with pytest.raises(CcxError, match="overlap"):
         Settings.load(tmp_path)
 
