@@ -29,9 +29,10 @@ permission:
     "git reset --hard*": deny
     "rm -rf*": deny
   task:
-    "*": deny
+    "*": ask
     "explore": allow
     "general": allow
+    "builder": ask
     "test-writer": ask
     "code-reviewer": allow
 ---
