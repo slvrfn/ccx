@@ -1,5 +1,6 @@
 from pathlib import Path
-from unittest.mock import Mock
+from typing import Any
+from unittest.mock import Mock, patch
 
 import pytest
 from click.testing import CliRunner
@@ -146,3 +147,97 @@ def test_cli_full_reindex_requires_approval(tmp_path: Path) -> None:
     )
     assert result.exit_code == 1
     assert "Aborted" in result.output
+
+
+def test_link_shared_agents_delegates_to_generated(
+    settings: Settings, runner: FakeRunner, project: Project
+) -> None:
+    app = Application(settings, runner)
+    expected_state = app.store.directory(project)
+    with patch("ccx.service.link_shared_agents") as mock_link:
+        app.link_shared_agents(project)
+    mock_link.assert_called_once_with(settings, project, expected_state)
+
+
+def test_unlink_shared_agents_delegates_to_generated(
+    settings: Settings, runner: FakeRunner, project: Project
+) -> None:
+    app = Application(settings, runner)
+    expected_state = app.store.directory(project)
+    with patch("ccx.service.unlink_shared_agents") as mock_unlink:
+        app.unlink_shared_agents(project)
+    mock_unlink.assert_called_once_with(expected_state, project)
+
+
+def _invoke_open(
+    settings: Settings,
+    project: Project,
+    *,
+    no_interactive: bool = False,
+    keep_alive: bool = False,
+) -> Any:
+    args = ["--home", str(settings.home), "open", str(project.path)]
+    if no_interactive:
+        args.append("--no-interactive")
+    if keep_alive:
+        args.append("--keep-alive")
+    return CliRunner().invoke(cli, args)
+
+
+@patch("ccx.cli.Application")
+def test_open_links_shared_agents_before_interactive(
+    mock_app_class: Mock, settings: Settings, project: Project
+) -> None:
+    app = Mock()
+    app.open.return_value = project
+    mock_app_class.return_value = app
+
+    result = _invoke_open(settings, project)
+    assert result.exit_code == 0, result.output
+
+    app.open.assert_called_once()
+    names = [call[0] for call in app.mock_calls]
+    assert names.index("link_shared_agents") < names.index("docker.interactive")
+    app.docker.interactive.assert_called_once_with(project)
+    app.unlink_shared_agents.assert_called_once_with(project)
+    app.docker.remove.assert_called_once_with(project)
+
+
+@pytest.mark.parametrize("keep_alive", [False, True])
+@patch("ccx.cli.Application")
+def test_open_unlinks_shared_agents_after_interactive(
+    mock_app_class: Mock,
+    settings: Settings,
+    project: Project,
+    keep_alive: bool,
+) -> None:
+    app = Mock()
+    app.open.return_value = project
+    mock_app_class.return_value = app
+
+    result = _invoke_open(settings, project, keep_alive=keep_alive)
+    assert result.exit_code == 0, result.output
+
+    app.link_shared_agents.assert_called_once_with(project)
+    app.docker.interactive.assert_called_once_with(project)
+    app.unlink_shared_agents.assert_called_once_with(project)
+    if keep_alive:
+        app.docker.remove.assert_not_called()
+    else:
+        app.docker.remove.assert_called_once_with(project)
+
+
+@patch("ccx.cli.Application")
+def test_open_no_interactive_skips_agent_sync(
+    mock_app_class: Mock, settings: Settings, project: Project
+) -> None:
+    app = Mock()
+    app.open.return_value = project
+    mock_app_class.return_value = app
+
+    result = _invoke_open(settings, project, no_interactive=True)
+    assert result.exit_code == 0, result.output
+
+    app.link_shared_agents.assert_not_called()
+    app.docker.interactive.assert_not_called()
+    app.unlink_shared_agents.assert_not_called()

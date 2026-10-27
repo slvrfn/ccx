@@ -111,12 +111,14 @@ def open_project(
             project,
             interval or app.settings.number("WATCH_DEBOUNCE_SECONDS"),
         )
+    if not no_interactive:
+        app.link_shared_agents(project)
     if no_interactive:
         return
     app.docker.interactive(project)
-    # OpenCode exited (/exit or session end): stop the managed project container.
-    # The persistent HOME volume is retained, so reopening reuses the image cache
-    # and state instead of rebuilding. --keep-alive opts out.
+    # OpenCode exited (/exit or session end): remove the shared agent symlinks,
+    # then stop the managed project container unless --keep-alive was requested.
+    app.unlink_shared_agents(project)
     if not keep_alive:
         app.docker.remove(project)
 
