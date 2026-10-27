@@ -7,7 +7,7 @@ from typing import Any
 from ccx.config import Settings, safe_home_root
 from ccx.errors import CcxError
 from ccx.graph.serve import READ_TOOLS
-from ccx.io import atomic_write, write_json
+from ccx.io import atomic_write, read_json, write_json
 from ccx.project import Project
 
 GUIDANCE = """Use graphify for dependency, relationship, community and impact questions.
@@ -157,3 +157,48 @@ def write_project_files(
                 text.rstrip("\n") + "\n\n# ccx generated artifacts\n" + "\n".join(missing) + "\n",
                 0o644,
             )
+
+
+def link_shared_agents(settings: Settings, project: Project, state: Path) -> list[Path]:
+    """Symlink shared OpenCode agents into the project, never overwriting user-owned ones.
+
+    Reads custom agents from ``settings.home / "agents"`` and symlinks each
+    ``*.md`` file into ``project.path / ".opencode" / "agents"``. Any agent name
+    that already exists in the project is skipped. Returns the created targets
+    and records their names in ``state / "shared-agents.json"`` so
+    :func:`unlink_shared_agents` can remove exactly those symlinks later.
+    """
+    source_dir = settings.home / "agents"
+    if not source_dir.is_dir():
+        return []
+    target_dir = project.path / ".opencode" / "agents"
+    if target_dir.is_symlink():
+        raise CcxError(f"Refusing to symlink agents through symlink: {target_dir}")
+    target_dir.mkdir(parents=True, exist_ok=True)
+    created: list[Path] = []
+    for source in sorted(source_dir.glob("*.md")):
+        target = target_dir / source.name
+        if target.exists() or target.is_symlink():
+            continue  # conflicting agent name; never overwrite user-owned agent
+        target.symlink_to(source)
+        created.append(target)
+    write_json(state / "shared-agents.json", [p.name for p in created])
+    return created
+
+
+def unlink_shared_agents(state: Path, project: Project) -> None:
+    """Remove the shared agent symlinks recorded in state, then drop the record.
+
+    Only symlinks are removed; regular files owned by the project are left alone.
+    Safe to call when no record exists.
+    """
+    record_path = state / "shared-agents.json"
+    if not record_path.exists():
+        return
+    names = read_json(record_path)
+    target_dir = project.path / ".opencode" / "agents"
+    for name in names:
+        target = target_dir / name
+        if target.is_symlink():
+            target.unlink()
+    record_path.unlink(missing_ok=True)

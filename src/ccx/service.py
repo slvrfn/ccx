@@ -8,7 +8,7 @@ from filelock import FileLock
 from ccx.config import Settings
 from ccx.docker import Docker
 from ccx.errors import CcxError
-from ccx.generated import write_project_files
+from ccx.generated import link_shared_agents, unlink_shared_agents, write_project_files
 from ccx.graph import Graphify
 from ccx.graph.output import require_owned
 from ccx.io import safe_child, write_json
@@ -39,6 +39,12 @@ class Application:
             raise CcxError(
                 "Project container is not running. Run ccx open <path> --no-interactive."
             )
+
+    def link_shared_agents(self, project: Project) -> None:
+        link_shared_agents(self.settings, project, self.store.directory(project))
+
+    def unlink_shared_agents(self, project: Project) -> None:
+        unlink_shared_agents(self.store.directory(project), project)
 
     def open(
         self,

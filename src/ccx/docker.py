@@ -102,40 +102,42 @@ class Docker:
         if self.exists(project):
             # Runtime env changes must not silently keep stale secrets/models.
             self.runner.run(["docker", "rm", "-f", project.container])
-        self.runner.run(
-            [
-                "docker",
-                "run",
-                "-d",
-                "--name",
-                project.container,
-                "--label",
-                "ccx.managed=true",
-                "--label",
-                f"ccx.slug={project.slug}",
-                "--network",
-                "context-net",
-                "--add-host",
-                "host.docker.internal:host-gateway",
-                "--init",
-                "--cap-drop=ALL",
-                "--security-opt",
-                "no-new-privileges",
-                "--env-file",
-                str(state / "runtime.env"),
-                "--mount",
-                f"type=bind,src={project.path},dst={project.mount}",
-                "--mount",
-                f"type=bind,src={state},dst=/ccx-config,readonly",
-                "--mount",
-                f"type=volume,src={project.volume},dst=/home/ccx",
-                "--workdir",
-                project.mount,
-                self.image_tag(),
-                "sleep",
-                "infinity",
-            ]
-        )
+        args = [
+            "docker",
+            "run",
+            "-d",
+            "--name",
+            project.container,
+            "--label",
+            "ccx.managed=true",
+            "--label",
+            f"ccx.slug={project.slug}",
+            "--network",
+            "context-net",
+            "--add-host",
+            "host.docker.internal:host-gateway",
+            "--init",
+            "--cap-drop=ALL",
+            "--security-opt",
+            "no-new-privileges",
+            "--env-file",
+            str(state / "runtime.env"),
+            "--mount",
+            f"type=bind,src={project.path},dst={project.mount}",
+            "--mount",
+            f"type=bind,src={state},dst=/ccx-config,readonly",
+            "--mount",
+            f"type=volume,src={project.volume},dst=/home/ccx",
+            "--workdir",
+            project.mount,
+            self.image_tag(),
+            "sleep",
+            "infinity",
+        ]
+        agents_dir = self.settings.home / "agents"
+        if agents_dir.is_dir():
+            args += ["--mount", f"type=bind,src={agents_dir},dst={agents_dir},readonly"]
+        self.runner.run(args)
 
     def exec(
         self, project: Project, args: Sequence[str], capture: bool = True, tty: bool = False

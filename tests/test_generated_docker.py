@@ -8,7 +8,12 @@ import yaml
 from ccx.config import Settings, asset_root
 from ccx.docker import Docker
 from ccx.errors import CcxError
-from ccx.generated import opencode_config, write_project_files
+from ccx.generated import (
+    link_shared_agents,
+    opencode_config,
+    unlink_shared_agents,
+    write_project_files,
+)
 from ccx.graph import Graphify
 from ccx.graph.serve import READ_TOOLS
 from ccx.project import Project
@@ -138,3 +143,137 @@ def test_compose_persistence_and_loopback() -> None:
     assert data["services"]["attu"]["profiles"] == ["ui"]
     assert len(data["volumes"]) == 3
     assert data["networks"]["context-net"]["name"] == "context-net"
+
+
+def test_link_shared_agents_missing_source_dir_returns_empty(
+    settings: Settings, project: Project, tmp_path: Path
+) -> None:
+    assert link_shared_agents(settings, project, tmp_path / "state") == []
+    assert not (project.path / ".opencode").exists()
+
+
+def test_link_shared_agents_creates_symlinks_for_md_files_only(
+    settings: Settings, project: Project, tmp_path: Path
+) -> None:
+    source_dir = settings.home / "agents"
+    source_dir.mkdir(parents=True)
+    (source_dir / "reviewer.md").write_text("# reviewer\n")
+    (source_dir / "summarizer.md").write_text("# summarizer\n")
+    (source_dir / "notes.txt").write_text("# notes\n")
+
+    state = tmp_path / "state"
+    created = link_shared_agents(settings, project, state)
+
+    target_dir = project.path / ".opencode" / "agents"
+    assert [p.name for p in created] == ["reviewer.md", "summarizer.md"]
+    for name in ("reviewer.md", "summarizer.md"):
+        target = target_dir / name
+        assert target.is_symlink()
+        assert target.resolve() == (source_dir / name).resolve()
+    assert not (target_dir / "notes.txt").exists()
+    assert json.loads((state / "shared-agents.json").read_text()) == [
+        "reviewer.md",
+        "summarizer.md",
+    ]
+
+
+def test_link_shared_agents_skips_conflicting_regular_file(
+    settings: Settings, project: Project, tmp_path: Path
+) -> None:
+    source_dir = settings.home / "agents"
+    source_dir.mkdir(parents=True)
+    (source_dir / "a.md").write_text("# a\n")
+    (source_dir / "b.md").write_text("# b\n")
+
+    target_dir = project.path / ".opencode" / "agents"
+    target_dir.mkdir(parents=True)
+    (target_dir / "a.md").write_text("# user-owned\n")
+
+    created = link_shared_agents(settings, project, tmp_path / "state")
+
+    assert [p.name for p in created] == ["b.md"]
+    assert (target_dir / "a.md").read_text() == "# user-owned\n"
+    assert (target_dir / "b.md").is_symlink()
+
+
+def test_link_shared_agents_skips_conflicting_symlink(
+    settings: Settings, project: Project, tmp_path: Path
+) -> None:
+    source_dir = settings.home / "agents"
+    source_dir.mkdir(parents=True)
+    (source_dir / "a.md").write_text("# a\n")
+    (source_dir / "b.md").write_text("# b\n")
+
+    target_dir = project.path / ".opencode" / "agents"
+    target_dir.mkdir(parents=True)
+    (target_dir / "a.md").symlink_to(source_dir / "a.md")
+
+    created = link_shared_agents(settings, project, tmp_path / "state")
+
+    assert [p.name for p in created] == ["b.md"]
+    assert (target_dir / "a.md").is_symlink()
+
+
+def test_link_shared_agents_refuses_symlink_agents_dir(
+    settings: Settings, project: Project, tmp_path: Path
+) -> None:
+    (settings.home / "agents").mkdir(parents=True)
+    (project.path / ".opencode").mkdir()
+    (project.path / ".opencode" / "agents").symlink_to(
+        tmp_path / "elsewhere", target_is_directory=True
+    )
+    with pytest.raises(CcxError, match="symlink"):
+        link_shared_agents(settings, project, tmp_path / "state")
+
+
+def test_unlink_shared_agents_no_record_is_noop(
+    settings: Settings, project: Project, tmp_path: Path
+) -> None:
+    unlink_shared_agents(tmp_path / "state", project)
+
+
+def test_unlink_shared_agents_removes_recorded_symlinks(
+    settings: Settings, project: Project, tmp_path: Path
+) -> None:
+    source_dir = settings.home / "agents"
+    source_dir.mkdir(parents=True)
+    (source_dir / "a.md").write_text("# a\n")
+
+    state = tmp_path / "state"
+    link_shared_agents(settings, project, state)
+    target = project.path / ".opencode" / "agents" / "a.md"
+    assert target.is_symlink()
+
+    unlink_shared_agents(state, project)
+
+    assert not target.exists()
+    assert not (state / "shared-agents.json").exists()
+
+
+def test_unlink_shared_agents_keeps_user_owned_regular_file(
+    settings: Settings, project: Project, tmp_path: Path
+) -> None:
+    state = tmp_path / "state"
+    state.mkdir(parents=True)
+    (state / "shared-agents.json").write_text(json.dumps(["a.md"]))
+
+    target_dir = project.path / ".opencode" / "agents"
+    target_dir.mkdir(parents=True)
+    (target_dir / "a.md").write_text("# user-owned\n")
+
+    unlink_shared_agents(state, project)
+
+    assert (target_dir / "a.md").read_text() == "# user-owned\n"
+    assert not (state / "shared-agents.json").exists()
+
+
+def test_unlink_shared_agents_tolerates_missing_symlink(
+    settings: Settings, project: Project, tmp_path: Path
+) -> None:
+    state = tmp_path / "state"
+    state.mkdir(parents=True)
+    (state / "shared-agents.json").write_text(json.dumps(["gone.md"]))
+
+    unlink_shared_agents(state, project)
+
+    assert not (state / "shared-agents.json").exists()
