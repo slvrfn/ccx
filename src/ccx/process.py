@@ -2,6 +2,7 @@
 
 import os
 import subprocess
+import traceback
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Protocol
@@ -46,12 +47,17 @@ class SubprocessRunner:
                 check=False,
             )
         except FileNotFoundError as exc:
+            traceback.print_exc()
             raise CcxError(
                 f"Executable not found: {args[0]}. Install Docker with Compose v2."
             ) from exc
         except subprocess.TimeoutExpired as exc:
+            traceback.print_exc()
             raise CcxError(f"{args[0]} timed out after {timeout}s.") from exc
         if result.returncode:
+            print(
+                f"Return code: {result.returncode}, stdout: {result.stdout}, stderr: {result.stderr}"
+            )
             # Never print full argv/environment: these may contain secrets.
             raise CcxError(
                 f"{args[0]} failed (exit {result.returncode}): {(result.stderr or '')[-2000:]}"

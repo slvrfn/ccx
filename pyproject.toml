@@ -38,7 +38,7 @@ dev = [
   "ty>=0.0.90",
 ]
 integration = [
-  "graphifyy[mcp]==0.9.83", "pymilvus==2.5.18", "milvus-lite==2.5.1",
+  "graphifyy[all]==0.9.83", "pymilvus==2.5.18", "milvus-lite==2.5.1",
   "setuptools==80.9.0",
 ]
 

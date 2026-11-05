@@ -14,7 +14,7 @@ import pytest
 )
 def test_real_graph_extract_update_query(tmp_path: Path) -> None:
     executable = shutil.which("graphify")
-    assert executable, "Install graphifyy[mcp]==0.9.83"
+    assert executable, "Install graphifyy[all]==0.9.83"
     repo = tmp_path / "repository"
     repo.mkdir()
     source = repo / "example.py"

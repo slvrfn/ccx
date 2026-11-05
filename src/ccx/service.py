@@ -1,5 +1,6 @@
 """Application use cases. UI and adapters contain no cross-backend orchestration."""
 
+import traceback
 from pathlib import Path
 from typing import Any
 
@@ -100,11 +101,13 @@ class Application:
                     result["semantic"] = self.semantic.build(project, full=full)
                 except Exception as exc:
                     failures["semantic"] = str(exc)
+                    traceback.print_exc()
             if project.graph_enabled and not semantic_only:
                 try:
                     result["graph"] = self.graph.build(project, full=full)
                 except Exception as exc:
                     failures["graph"] = str(exc)
+                    traceback.print_exc()
             write_json(state / "last-refresh.json", {"result": result, "errors": failures})
         if failures:
             raise CcxError(

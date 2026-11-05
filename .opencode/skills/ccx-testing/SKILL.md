@@ -45,6 +45,6 @@ Guidance for testing `ccx` (`code-context-cli`).
 
 ## Integration test requirements
 
-- Graphify integration: install `graphifyy[mcp]==0.9.83` and set `CCX_TEST_GRAPHIFY=1`.
+- Graphify integration: install `graphifyy[all]==0.9.83` and set `CCX_TEST_GRAPHIFY=1`.
 - Semantic integration: local Milvus Lite + embedding stub (Node/npm required).
 - Integration group: `uv sync --locked --group integration`.

@@ -135,7 +135,10 @@ class Settings:
         for name in ("compose.yaml", "Dockerfile", ".dockerignore"):
             dest = self.home / name
             if force or not dest.exists():
-                shutil.copyfile(asset_root() / name, dest)
+                file_src = asset_root() / name
+                shutil.copyfile(file_src, dest)
+                print(f"Copied {file_src} -> {dest}")
+
         shutil.copyfile(asset_root() / ".env.example", self.home / ".env.example")
         if not (self.home / ".env").exists():
             template = (asset_root() / ".env.example").read_text()
@@ -149,8 +152,14 @@ class Settings:
             dirs_exist_ok=True,
             ignore=shutil.ignore_patterns("__pycache__"),
         )
+
+        print(f"Copied {package} -> {self.home / 'src' / 'ccx'}")
+
         for name in ("package.json", "package-lock.json", "requirements-container.txt"):
-            shutil.copyfile(asset_root() / name, self.home / name)
+            file_src = asset_root() / name
+            dest = self.home / name
+            shutil.copyfile(file_src, self.home / name)
+            print(f"Copied {file_src} -> {dest}")
 
     def check(self) -> dict[str, list[str]]:
         defaults = set(dotenv_values(asset_root() / ".env.example"))
