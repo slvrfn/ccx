@@ -102,6 +102,8 @@ class Docker:
         if self.exists(project):
             # Runtime env changes must not silently keep stale secrets/models.
             self.runner.run(["docker", "rm", "-f", project.container])
+
+        agents_dir = self.settings.home / "agents"
         args = [
             "docker",
             "run",
@@ -128,15 +130,18 @@ class Docker:
             f"type=bind,src={state},dst=/ccx-config,readonly",
             "--mount",
             f"type=volume,src={project.volume},dst=/home/ccx",
+        ]
+
+        if agents_dir.is_dir():
+            args += ["--mount", f"type=bind,src={agents_dir},dst={agents_dir},readonly"]
+
+        args += [
             "--workdir",
             project.mount,
             self.image_tag(),
             "sleep",
             "infinity",
         ]
-        agents_dir = self.settings.home / "agents"
-        if agents_dir.is_dir():
-            args += ["--mount", f"type=bind,src={agents_dir},dst={agents_dir},readonly"]
         self.runner.run(args)
 
     def exec(
